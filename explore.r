@@ -1,3 +1,20 @@
+## explore.r : exploring the Tate Collection dataset
+##
+## Copyright (c) 20013 Rob Myers <rob@robmyers.org>
+##
+## This program is free software; you can redistribute it and/or modify
+## it under the terms of the GNU General Public License as published by
+## the Free Software Foundation; either version 3 of the License, or
+## (at your option) any later version.
+##
+## minara is distributed in the hope that it will be useful,
+## but WITHOUT ANY WARRANTY; without even the implied warranty of
+## MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+## GNU General Public License for more details.
+##
+## You should have received a copy of the GNU General Public License
+## along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 library(grid)
 library(igraph)
 library(ggplot2)
@@ -14,7 +31,7 @@ artist.locations<-read.csv("../tate-data/artist-locations.csv")
 artist.movements<-read.csv("../tate-data/artist-movements.csv")
 artist.subjects<-read.csv("../tate-data/artist-subjects.csv")
 
-artwork.movement<-read.csv("../tate-data/artwork-movements.csv")
+artwork.movements<-read.csv("../tate-data/artwork-movements.csv")
 artwork.subjects<-read.csv("../tate-data/artwork-subjects.csv")
 artwork.subjects.sentiment<-
     read.csv("../tate-data/artwork-subjects-sentiment.csv")
@@ -33,8 +50,8 @@ movement.titles.corpus<-read.csv("../tate-data/movement-titles-corpus.csv")
 ## Extract and generate some useful data
 ################################################################################
 
-eras<-unique(artwork.movement$movement.era.name)
-movements<-unique(artwork.movement$movement.name)
+eras<-unique(artwork.movements$movement.era.name)
+movements<-unique(artwork.movements$movement.name)
 
 categories<-unique(artwork.subjects$category.name)
 subcategories<-unique(artwork.subjects$subcategory.name)
@@ -44,6 +61,9 @@ artist.birth.decade<-round(artist$yearOfBirth, digits=-1)
 artist.birth.century<-round(artist$yearOfBirth, digits=-2)
 artist.death.decade<-round(artist$yearOfDeath, digits=-1)
 artist.death.century<-round(artist$yearOfDeath, digits=-2)
+
+artwork.year.min<-min(artwork$year, na.rm=TRUE)
+artwork.year.max<-max(artwork$year, na.rm=TRUE)
 
 ################################################################################
 ## Basic stats
@@ -97,9 +117,9 @@ summary(artwork$height)[1:20]
 
 ## Artwork movement
 
-summary(artwork.movement)
-summary(artwork.movement$movement.name)[1:20]
-summary(artwork.movement$movement.era.name)
+summary(artwork.movements)
+summary(artwork.movements$movement.name)[1:20]
+summary(artwork.movements$movement.era.name)
 
 ## Artwork subject
 
@@ -112,51 +132,74 @@ summary(artwork.subjects$subject.name)[1:20]
 
 ## Movement subjects
 
-
-
 ################################################################################
 ## Movement Artwork Counts
 ################################################################################
 
-artwork.movement.year<-data.frame(
-    id=artwork.movement$artwork.id,
-    year=artwork$year[match(artwork.movement$artwork.id, artwork$id)],
-    movement=artwork.movement$movement.name)
+## Get the artworks for the movement name
 
-movementYearsFrequency<-function(movement) {
-    rle(sort(artwork.movement.year$year[artwork.movement.year$movement %in%
-                                            movement]))
+movementYearsFrequency<-function(movement.name) {
+    artworks.for.movement.<-artwork.movements$movement.name %in% movement.name
+    rle(sort(artwork.movements$year[artworks.for.movement]))
 }
 
-freqs<-do.call(rbind,
-               lapply(names(summary(artwork.movement$movement.name)[1:20]),
-                      function(movement) {
-                          frequencies<-movementYearsFrequency(movement)
-                          data.frame(Movement=rep(movement,
-                                         length(frequencies$values)),
-                                     Year=frequencies$values,
-                                     Count=frequencies$lengths,
-                                     stringsAsFactors=FALSE)
-}))
+## We don't want every movement, as it quickly becomes an unreadable mess
+## 1:16 > 100
+## 1:30 > 50
+top.few.movements<-names(summary(artwork.movements$movement.name)[1:16])
 
+## geom_area() needs entries for every year, and every moment, in order
+## So we make a table of years/movements for which we have entries,
+## then we make a table of all years/movements, with 0 as the count
+## and then we combine them and remove duplicates (the 0s are the duplicates).
 
+pop.freqs<-do.call(rbind,
+                   lapply(top.few.movements,
+                          function(movement) {
+                              frequencies<-movementYearsFrequency(movement)
+                              data.frame(Movement=rep(movement,
+                                             length(frequencies$values)),
+                                          Year=frequencies$values,
+                                         Count=frequencies$lengths,
+                                         stringsAsFactors=FALSE)
+                          }))
+
+empty.freqs<-do.call(rbind,
+                     lapply(artwork.year.min:artwork.year.max,
+                            function(year) {
+                                data.frame(Movement=top.few.movements,
+                                           Year=year,
+                                           Count=0,
+                                           stringsAsFactors=FALSE)
+                            }))
+
+## Combine the tables, zeros second so they are considered the duplicates
+freqs<-rbind(pop.freqs, empty.freqs)
+## Remove duplicates, leaving zero entries only where there is no count
+freqs<-freqs[! duplicated(freqs[c("Movement", "Year")]),]
+## Order by year and movement so geom_area is happy
+freqs<-freqs[order(freqs$Year, freqs$Movement),]
+## REMOVE IF INTERESTED IN EARLIER ENTRIES
+## Concentrate on the bulk of the collection
+freqs<-freqs[freqs$Year >= 1800,]
+
+pdf(file="movement-work-count.pdf", width=20, height=10)
 ggplot(data=freqs,
-       aes(x=Year, y=Count, group=Movement, fill=Movement, colour=Movement)) +
-    geom_area(position="stack", stat="identity") + ##geom_line() +
-    ggtitle("Movements")
+       aes(x=Year, y=Count, fill=Movement)) +
+    geom_area(group=freqs$Movement, position = "stack") +
+    scale_y_continuous(name="Total Number of Artworks")
+    ggtitle("Number Of Artworks Per Year By Movement In The Tate Collection")
+dev.off()
 
 plotMovementFrequency<-function(movement) {
     movement.years<-movementYearsFrequency(movement)
     plot(movement.years$values, movement.years$lengths, type="l", xlab="Year",
          ylab="Works", main=movement)
-
-    ggplot(data=mdf, aes(x=Year, y=value, group = Company, colour = Company)) +
-    geom_line()
 }
 
-plotMovementFrequency("Constructivism")
+pdf(file="yba-work-count.pdf", width=20, height=10)
 plotMovementFrequency("Young British Artists (YBA)")
-
+dev.off()
         
 ################################################################################
 ## Movement Artwork Sizes
@@ -166,18 +209,27 @@ plotMovementFrequency("Young British Artists (YBA)")
 ## Plot movement durations
 ################################################################################
 
+## Find when the movement started and ended
+## or at least when the first and last works in the collection for that movement
+## date to.
+
 movementDuration<-function(movement) {
-    matching.indexes<-artwork.movement$movement.name == movement
-    artworks.for.movement<-artwork.movement[matching.indexes,]
+    matching.indexes<-artwork.movements$movement.name == movement
+    artworks.for.movement<-artwork.movements[matching.indexes,]
     c(from=min(artworks.for.movement$year, na.rm=TRUE),
       to=max(artworks.for.movement$year, na.rm=TRUE))
 }
+
+## Make a frame of movement durations
 
 movements.from.to<-do.call(rbind, lapply(movements, movementDuration))
 movement.durations<-data.frame(movement=as.character(movements),
                                from=movements.from.to[,"from"],
                                to=movements.from.to[,"to"],
                                stringsAsFactors=FALSE)
+
+## Plot movement durations with the movments in the specified order
+## e.g. alphabetically, or by when they start or end
 
 plotMovementDurations<-function(movement.data, movement.order) {
     to.plot<-data.frame(fromto=ggplot2:::interleave(movement.data$from,
@@ -208,8 +260,9 @@ plotMovementDurations<-function(movement.data, movement.order) {
 movement.durations.alpha<-movement.durations[order(movement.durations$movement,
                                                    decreasing=TRUE),]
 movement.order.alpha<-rep(factor(movement.durations.alpha$movement,
-                                levels=unique(movement.durations.alpha$movement),
-                                ordered=TRUE), each=2)
+                                 levels=unique(movement.durations.alpha$
+                                     movement),
+                                 ordered=TRUE), each=2)
 pdf(file="movement-durations-name.pdf", width=10, height=20)
 plotMovementDurations(movement.durations.alpha, movement.order.alpha)
 dev.off()
@@ -236,6 +289,9 @@ edgeColoursFromNodes <- function(g) {
     from <- get.edges(g, E(g))[,1]
     E(g)$color <- V(g)$color[from]
 }
+
+## Plot the graph g with its names transformed by nameFun
+## pass identity for untransformed names
 
 plot.graph <- function (g, nameFun) {
     ## We scale various properties by degree, so we get degree and max for this
@@ -266,6 +322,8 @@ plot.graph <- function (g, nameFun) {
          )
 }
 
+## Convert the relationship table to a graph suitable for plotting
+
 to.graph <- function (relationships) {
     ## Create a graph from the table
     g <- graph.edgelist(as.matrix(relationships), directed=TRUE)
@@ -288,13 +346,14 @@ to.graph <- function (relationships) {
     g
 }
 
+## Convert the links between movements that artists were in to a graph and plot
+
 links<-movement.artist.links[c("first.movement.name", "second.movement.name")]
 movement.artist.links.graph<-to.graph(links)
 
 pdf(file="movement-artist-links.pdf", width=8, height=8)
 plot.graph(movement.artist.links.graph, identity)
 dev.off()
-
 
 ################################################################################
 ## Genres
