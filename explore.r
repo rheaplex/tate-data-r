@@ -40,8 +40,10 @@ artwork.title.sentiment<-read.csv("../tate-data/artwork-title-sentiment.csv")
 movement.artist.links<-read.csv("../tate-data/movement-artist-links.csv")
 movement.subjects<-read.csv("../tate-data/movement-subjects.csv")
 
-artist.subjects.corpus<-read.csv("../tate-data/artist-subjects-corpus.csv")
-artist.titles.corpus<-read.csv("../tate-data/artist-titles-corpus.csv")
+artist.subjects.corpus<-read.csv("../tate-data/artist-subjects-corpus.csv",
+                                 stringsAsFactors=FALSE)
+artist.titles.corpus<-read.csv("../tate-data/artist-titles-corpus.csv",
+                                 stringsAsFactors=FALSE)
 artwork.subjects.corpus<-read.csv("../tate-data/artwork-subjects-corpus.csv")
 movement.subjects.corpus<-read.csv("../tate-data/movement-subjects-corpus.csv")
 movement.titles.corpus<-read.csv("../tate-data/movement-titles-corpus.csv")
@@ -80,9 +82,11 @@ summary(artist$yearOfDeath)
 ## decades
 summary(artist.birth.decade)
 summary(artist.death.decade)
+sort(table(artist.birth.decade), decreasing=TRUE)
 ## Centuries
 summary(artist.birth.century)
 summary(artist.death.century)
+sort(table(artist.birth.death), decreasing=TRUE)
 
 ## Artist Gender
 
@@ -102,11 +106,12 @@ summary(artist.movements$movement.name)
 #### Era
 table(artist.movements$movement.era.name, artist.movements$artist.gender)
 #### Movement
-amagt<-table(artist.movements$movement.name, artist.movements$artist.gender)
+movement.gender<-table(artist.movements$movement.name,
+                       artist.movements$artist.gender)
 #### Sort by Female
-amagt<-amagt[order(amagt[,2], decreasing=TRUE),]
+movement.gender<-movement.gender[order(movement.gender[,2], decreasing=TRUE),]
 #### Show first 20
-amagt[1:20,]
+movement.gender[1:20,]
 
 ## Artwork
 
@@ -130,7 +135,17 @@ summary(artwork.subjects$subject.name)[1:20]
 
 ## Artist subjects
 
+summary(artist.subjects)
+summary(artist.subjects$category.name)[1:20]
+summary(artist.subjects$subcategory.name)[1:20]
+summary(artist.subjects$subject.name)[1:20]
+
 ## Movement subjects
+
+summary(movement.subjects)
+summary(movement.subjects$category.name)[1:20]
+summary(movement.subjects$subcategory.name)[1:20]
+summary(movement.subjects$subject.name)[1:20]
 
 ################################################################################
 ## Movement Artwork Counts
@@ -200,13 +215,32 @@ plotMovementFrequency<-function(movement) {
 pdf(file="yba-work-count.pdf", width=20, height=10)
 plotMovementFrequency("Young British Artists (YBA)")
 dev.off()
-        
-################################################################################
-## Movement Artwork Sizes
-################################################################################
 
 ################################################################################
-## Plot movement durations
+## Artwork Sizes
+################################################################################
+
+## Artist
+
+## Movement
+
+## Medium
+
+## Subject
+
+
+################################################################################
+## Medium
+################################################################################
+
+## Artist
+
+## Movement
+
+## Subject (need to add medium column)
+
+################################################################################
+## Movement durations
 ################################################################################
 
 ## Find when the movement started and ended
@@ -278,9 +312,8 @@ pdf(file="movement-durations-era.pdf", width=10, height=20)
 plotMovementDurations(movement.durations.from, movement.order.from)
 dev.off()
 
-
 ################################################################################
-## Plot links between movements by artists
+## Links between movements by artists
 ################################################################################
 
 ## Copy the node's color to edges emerging from it
@@ -359,16 +392,60 @@ dev.off()
 ## Genres
 ################################################################################
 
+## Clean text
+cleanArticle<-function(text){
+    ## Remove punctuation
+    text<-lapply(text, function(line){gsub("[[:punct:]]", "", line)})
+    ## Lowercase words
+    text<-lapply(text, tolower)
+    text
+}
+
+## Similar entities
+
+similarEntities<-function(dtm, names) {
+    # Dissimilarity
+    dis<-dissimilarity(dtm, method="cosine")
+    ## The most similar for each, in order of similarity
+    similarityMin<-0.25
+    mostSimilarEnities<-apply(dis, 1,
+                       function(row){
+                           sorted<-sort(row)
+                           ordered<-order(row)
+                           ## 0.0 == same entity
+                           ordered[sorted > 0.0 & sorted < similarityMin]
+                       })
+    for(doc in 1:length(mostSimilarEntities)){
+        mostSimilar<-unlist(mostSimilarEntities[doc])
+        if(length(mostSimilar) > 0){
+            count<-min(length(mostSimilar), 5)
+            similar<-paste(names[mostSimilar[1:count]], collapse=", ")
+        }else{
+            similar<-"None"
+        }
+        cat(names[[doc]], ": ", similar, "\n\n")
+    }
+}
+
 ## Artworks by subjects
 
 ## Artworks by title
 
 ## Artists by subjects
 
+artist.subjects.corpus.clean<-lapply(artist.subjects.corpus$subjects,
+                                     cleanArticle)
+artist.subjects.corpus.corpus<-Corpus(VectorSource(artist.subjects.corpus.clean),
+                                      readerControl=list(language="english",
+                                          reader=readPlain))
+## Term/document matrix
+artist.subjects.dtm<-DocumentTermMatrix(artist.subjects.corpus.corpus)
+
+## Frequent terms in the matrix
+findFreqTerms(artist.subjects.dtm, 4)
+
+similarEntities(artist.subjects.dtm, artist.subjects.corpus$artist.name)
+
 ## Artists by titles
 
-################################################################################
-## Movements
-################################################################################
-
-## Movement by medium
+## "Movement" by artist/medium (&....) ?
