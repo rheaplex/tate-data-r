@@ -1,0 +1,155 @@
+Exploring Tate Art Open Data 1
+================================================================================
+
+```{r setup, echo=FALSE}
+## results='asis' isn't good for tabular data
+## echo=FALSE hides the code, sometimes useful but the code is useful for the narrative
+```
+
+This is the first in a series of posts examining Tate's excellent collection dataset available at [http://www.tate.org.uk/about/our-work/digital/collection-data](http://www.tate.org.uk/about/our-work/digital/collection-data) .
+
+I've processed that dataset using code for Mongo DB and Node.js available at [https://gitorious.org/robmyers/tate-data/](https://gitorious.org/robmyers/tate-data/) .
+
+The R and R Markdown code for this series is available at [https://gitorious.org/robmyers/tate-data-r/](https://gitorious.org/robmyers/tate-data-r/) .
+
+This document has been produced using [Knitr](http://yihui.name/knitr/). Text in light grey boxes is R code, text in white boxes is the output of that code.
+
+Let's get started by loading the data.
+
+```{r}
+source("../r/load_tate_data.r")
+```
+
+That file reads the comma separated value (csv) files containing information about the Tate's collection and generates some useful extra tables of information. Now we have everything in memory we can start examining the collection data.
+
+Artists
+--------------------------------------------------------------------------------
+
+What can we find out about artists in general?
+
+```{r, comment=NA}
+summary(artist[c("name", "gender", "dates", "yearOfBirth", "yearOfDeath", "placeOfBirth", "placeOfDeath")])
+```
+There are more male than female artists, and the yBA and Pop generations lead the births.
+
+Depending on whether we treat place of birth or place of death as more representative, London and Paris are ahead of New York or Edinburgh.
+
+We can smooth out the birth and death dates by grouping them by decade or century.
+
+```{r, comment=NA}
+summary(artist.birth.decade)
+summary(artist.death.decade)
+sort(table(artist.birth.decade), decreasing=TRUE)
+
+summary(artist.birth.century)
+summary(artist.death.century)
+sort(table(artist.death.decade), decreasing=TRUE)
+```
+
+That's quite a different result from that suggested by the yearly results. Decade-wise, birth percentiles are clustered around the turn of the 20th century, deaths around the second world war. But the largest number of births are in the 1930s/1940s with the 1960s coming in second. The deaths look like they reflect the distribution of births, although it would be useful to confirm this statistically.
+
+The maximim birth being in the 2000s doesn't mean that the Tate is collecting child artists, the birth data also includes the years that artist groups were started.
+
+How well is gender represented in the collection?
+
+```{r, comment=NA}
+table(artist.birth.decade, artist$gender)
+
+table(artist.birth.century, artist$gender)
+```
+
+The first, unlabelled, column is for artists whose gender is not currently recorded in the data.
+
+As we saw in the summary, there are more male artists than female artists in the Tate's collection. There is no decade or century in which this trend is reversed. The story is slightly different when we look at artistic movements.
+
+Movements
+--------------------------------------------------------------------------------
+
+The data for artists includes information on `r length(movements$movement.name)` artists movements. If we looked at the artwork data there might be more, but we'll stick with the artists for now. 
+
+```{r, comment=NA}
+summary(artist.movements[c("artist.fc", "artist.gender", "movement.era.name", "movement.name")])
+summary(artist.movements$movement.era.name)
+summary(artist.movements$movement.name)
+```
+
+The artists included in the most movements are some of the grand elders of British 20th Century art. Being in an art movement doesn't improve gender representation.
+
+The most movements are post-1945. Performance art is more popular than Conceptual art, which is interesting given public discussion of state art funding in the UK. "Netherlands-trained, working in Britain" clearly isn't a movement, as with the birth dates the movement name field doesn't always describe a movement per se.
+
+Let's break down gender by movement.
+
+```{r, comment=NA}
+table(artist.movements$movement.era.name, artist.movements$artist.gender)
+movement.gender<-table(artist.movements$movement.name,
+                       artist.movements$artist.gender)
+movement.gender<-movement.gender[order(movement.gender[,2], decreasing=TRUE),]
+movement.gender[1:20,]
+```
+
+Representation improves slightly over time. Unsurprisingly, feminist art has more female than male artists represented. Abject art is a tie, and there are more than half as many female performance artists as male ones.
+
+Artworks
+--------------------------------------------------------------------------------
+
+There are `r length(artwork.title)` artworks in the dataset.
+
+```{r, comment=NA}
+summary(artwork[c("artist", "title", "dateText")])
+summary(artwork$year)
+```
+
+JMW Turner has _tens of thousands_ more works in the collection than the next nearest artist. Is this a glitch? No, it's due to the fact that the Tate holds the [Turner Bequest](http://www.tate.org.uk/research/prints-and-drawings-rooms/turner-bequest) of around 30,000 works on paper.
+
+What are artworks titled? Usually Untitled, or simply no title. "Mountains" appears to be the most popular actual title, although if we stemmed or otherwise abstracted and clustered the titles other popular ones might emerge. 
+
+The most popular years for artworks are in the early 1800s. This, and possibly the titles, are again attributable to Turner. It would probably be productive to remove Turner's works on paper (or more simply just remove all Turner's works) from the dataset and try again, as his presence is clearly skewing the analysis.
+
+Both artists and artworks have movements. Let's look at how artwork movements differ from artists.
+
+```{r, comment=NA}
+summary(artwork.movements)
+summary(artwork.movements$movement.name)[1:20]
+summary(artwork.movements$movement.era.name)
+```
+
+Pop and Pre-Raphaelitism gain in popularity, but Conceptualism and Surrealism are still popular.
+
+Subjects
+--------------------------------------------------------------------------------
+
+Each artwork is tagged with descriptions of the subjects that it depicts. Subjects have levels, from general to specific, which I've named the category, subcategory and subject. We can group the subjects of artworks by artists and movements to find out what their characteristic subjects were.
+
+```{r, comment=NA}
+summary(artwork.subjects[c("artwork.title", "artwork.dateText", "category.name", "subcategory.name", "subject.name")])
+summary(artwork.subjects$category.name)[1:20]
+summary(artwork.subjects$subcategory.name)[1:16]
+summary(artwork.subjects$subject.name)[1:20]
+```
+
+The summary looks like Turner is skewing the results again. The subjects are mostly English landscape of the early 19th Century. But the categories are led by more non-representional subjects, before the subcategories and subjects return to landscape. People ("adults", "man", "woman") emerge as popular subjects as well, indeed they are the second largest subcategory.
+
+```{r, comment=NA}
+summary(artist.subjects[c("artist.name", "category.name", "subcategory.name", "subject.name")])
+summary(artist.subjects$category.name)[1:20]
+summary(artist.subjects$subcategory.name)[1:16]
+summary(artist.subjects$subject.name)[1:20]
+```
+
+The results from artist subjects don't differ appreciably from the artwork ones. We wouldn't expect any difference, but some artworks have more than one artist or have none, so this introduces variations.
+
+```{r, comment=NA}
+summary(movement.subjects[c("movement.name", "era.name", "artwork.title ", "category.name", "subcategory.name", "subject.name")])
+summary(movement.subjects$category.name)[1:20]
+summary(movement.subjects$subcategory.name)[1:16]
+summary(movement.subjects$subject.name)[1:20]
+```
+
+"Insertions into Ideological Circuits 2: Banknote Project" has multiple json records with multiple movements and topics in each, so it's over-represented here. The subjects are still similar, although with more photography.
+
+Conclusions
+--------------------------------------------------------------------------------
+
+What can we conclude from this? The collection is dominated by male British pop artists, more from England than from Scotland or the rest of the UK. The subjects of artworks are what one would expect: landscape, human figures, abstracts. The Turner Bequest skews some of the data, and this should be accounted for or addressed in analysis. A few other artworks also skew some results.
+
+Next we'll look more closely at artistic movements with some data visualizations.

@@ -1,0 +1,35 @@
+Tate Data R
+-----------
+
+Exploring the Tate's collection dataset with R and Knitr.
+
+By Rob Myers <rob@robmyers.org> .
+
+Dependencies
+------------
+
+The R programming language.
+
+The R libraries ggplot2, grid, igraph, knitr and tm .
+
+The tate-data project: https://gitorious.org/robmyers/tate-data
+
+(This project repository should be checked out next to the tate-data one, at the same level.)
+
+How To Use
+----------
+
+Install the dependencies.
+
+Run make.
+
+View the resulting PDFs and HTML files.
+
+Pre-made PDF and HTML files are included in this repositort.
+
+Products
+--------
+
+PDFs of visualizations are placed in /pdf .
+
+Rendered HTML of report documents are placed in /html .
