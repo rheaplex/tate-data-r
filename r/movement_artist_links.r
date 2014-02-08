@@ -16,8 +16,6 @@
 
 library(igraph)
 
-source("./load_tate_data.r")
-
 ################################################################################
 ## Links between movements by artists
 ################################################################################
@@ -90,9 +88,13 @@ to.graph <- function (relationships) {
 links<-movement.artist.links[c("first.movement.name", "second.movement.name")]
 movement.artist.links.graph<-to.graph(links)
 
+plotMovementArtistLinks <- function () {
+    plot.graph(movement.artist.links.graph, identity)
+}
+
 plotMovementArtistLinksPDF <- function (filename) {
     pdf(file=filename, width=8, height=8)
-    plot.graph(movement.artist.links.graph, identity)
+    plotMovementArtistLinks()
     dev.off()
 }
 
